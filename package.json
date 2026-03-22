@@ -1,0 +1,17 @@
+{
+  "name": "strikezone-game",
+  "version": "1.0.0",
+  "description": "## Overview StrikeZone is a 2-player real-time number strike game built with React for the frontend and Node.js for the backend. Players take turns striking numbers on a 5x5 grid, aiming to outscore each other.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "socket.io": "^4.8.1"
+  }
+}
