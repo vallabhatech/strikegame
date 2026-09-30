@@ -2,6 +2,9 @@
 
 StrikeZone is a real-time two-player number strategy game. Each player receives a shuffled 5×5 board containing numbers 1–25 and takes turns striking numbers. Complete a row, column, or diagonal of struck numbers to win.
 
+<img width="1408" height="768" alt="Gemini_Generated_Image_vci93bvci93bvci9" src="https://github.com/user-attachments/assets/8f7d4755-ea9e-4ae5-9bdf-6eae14ae0f98" />
+
+
 ## Stack
 
 - **Frontend:** React 18 + TypeScript + Create React App
