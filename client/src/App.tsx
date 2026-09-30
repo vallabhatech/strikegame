@@ -28,23 +28,13 @@ const generateBoard = (): number[][] => {
 
   for (let index = numbers.length - 1; index > 0; index -= 1) {
     const randomIndex = Math.floor(Math.random() * (index + 1));
-    [numbers[index], numbers[randomIndex]] = [numbers[randomIndex], numbers[index]];
+    const current = numbers[index];
+    numbers[index] = numbers[randomIndex] ?? current;
+    numbers[randomIndex] = current;
   }
 
   return Array.from({ length: 5 }, (_, row) =>
     numbers.slice(row * 5, row * 5 + 5),
-  );
-};
-
-const checkWin = (board: number[][], strikes: Set<number>): boolean => {
-  for (let index = 0; index < 5; index += 1) {
-    if (board[index]?.every((number) => strikes.has(number))) return true;
-    if (board.every((row) => strikes.has(row[index] ?? -1))) return true;
-  }
-
-  return (
-    board.every((row, index) => strikes.has(row[index] ?? -1)) ||
-    board.every((row, index) => strikes.has(row[4 - index] ?? -1))
   );
 };
 
