@@ -1,22 +1,24 @@
 {
-  "name": "strikezone-game",
-  "version": "1.0.0",
+  "name": "strikezone-client",
+  "version": "1.1.0",
   "private": true,
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
+    "typecheck": "tsc --noEmit",
     "eject": "react-scripts eject"
   },
   "dependencies": {
-    "react": "^17.0.2",
-    "react-dom": "^17.0.2",
-    "react-scripts": "4.0.3",
-    "socket.io-client": "^4.0.0",
-    "typescript": "^4.1.2"
+    "@types/node": "^20.14.12",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-scripts": "5.0.1",
+    "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
-    "@types/react": "^17.0.87",
-    "@types/react-dom": "^17.0.2"
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.5.4"
   }
 }
