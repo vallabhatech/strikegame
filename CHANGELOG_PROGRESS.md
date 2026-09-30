@@ -57,7 +57,11 @@ Step-by-step modernization, reliability, security, and documentation log.
 - Added JavaScript/TypeScript CodeQL scanning for pushes and pull requests.
 - Added a weekly scheduled security scan using the security-extended query suite.
 
-### Step 11 — Rewrite documentation
+### Step 11 — Add responsive game interface
+- Replaced placeholder utility-class styling with a self-contained responsive CSS interface.
+- Added mobile-friendly board sizing, lobby/game states, focus states, and accessible status messaging.
+
+### Step 12 — Rewrite documentation
 - Replaced the stale README with documentation matching the current architecture.
 - Added setup, environment, Socket.IO event, production, security, CI, testing, and scaling documentation.
 
@@ -68,3 +72,4 @@ Step-by-step modernization, reliability, security, and documentation log.
 - This environment cannot execute GitHub-hosted runner jobs directly; workflow commits trigger the hosted runs on GitHub.
 - The repository has no committed npm lockfiles, so CI uses `npm install` rather than `npm ci`.
 - Final runtime/build status must be taken from the GitHub Actions run results rather than assumed from static inspection.
+- The final client/server synchronization fixes were committed after the initial workflow configuration so subsequent pushes will exercise the latest code.
