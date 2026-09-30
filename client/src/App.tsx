@@ -75,6 +75,8 @@ const App = () => {
     const onStartGame = ({ players: nextPlayers, turn: nextTurn }: StartGamePayload) => {
       setPlayers(nextPlayers);
       setTurn(nextTurn);
+      setBoard(generateBoard());
+      setStrikes(new Set());
       setWinner('');
       setError('');
     };
@@ -109,6 +111,11 @@ const App = () => {
       socket.off('playerLeft', onPlayerLeft);
     };
   }, []);
+
+  useEffect(() => {
+    if (!inRoom || !roomCode || board.length !== 5) return;
+    socket.emit('sendBoard', { roomCode, board });
+  }, [board, inRoom, roomCode]);
 
   const handleCreate = () => {
     if (!normalizedNickname) {
