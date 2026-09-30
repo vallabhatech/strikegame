@@ -1,148 +1,262 @@
-import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Route, Switch } from 'react-router-dom';
-import io from 'socket.io-client';
-import GameBoard from './components/GameBoard';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import io, { Socket } from 'socket.io-client';
+import './App.css';
 
-const socket = io('http://localhost:4000');
+type ServerError = { error?: string };
 
-function generateBoard() {
-  const nums = Array.from({ length: 25 }, (_, i) => i + 1)
-    .sort(() => Math.random() - 0.5);
-  return Array.from({ length: 5 }, (_, i) => nums.slice(i * 5, i * 5 + 5));
-}
+type StartGamePayload = {
+  players: string[];
+  turn: string;
+};
 
-function checkWin(board, strikes) {
-  // Check rows, cols, diags for all struck
-  for (let i = 0; i < 5; i++) {
-    if (board[i].every(n => strikes.has(n))) return true;
-    if (board.map(row => row[i]).every(n => strikes.has(n))) return true;
+type StrikePayload = {
+  number: number;
+  nextTurn: string;
+};
+
+const SOCKET_URL =
+  process.env.REACT_APP_SOCKET_URL ??
+  `${window.location.protocol}//${window.location.hostname}:4000`;
+
+const socket: Socket = io(SOCKET_URL, {
+  autoConnect: true,
+  transports: ['websocket', 'polling'],
+});
+
+const generateBoard = (): number[][] => {
+  const numbers = Array.from({ length: 25 }, (_, index) => index + 1);
+
+  for (let index = numbers.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1));
+    [numbers[index], numbers[randomIndex]] = [numbers[randomIndex], numbers[index]];
   }
-  if ([0,1,2,3,4].every(i => strikes.has(board[i][i]))) return true;
-  if ([0,1,2,3,4].every(i => strikes.has(board[i][4-i]))) return true;
-  return false;
-}
 
-const App: React.FC = () => {
+  return Array.from({ length: 5 }, (_, row) =>
+    numbers.slice(row * 5, row * 5 + 5),
+  );
+};
+
+const checkWin = (board: number[][], strikes: Set<number>): boolean => {
+  for (let index = 0; index < 5; index += 1) {
+    if (board[index]?.every((number) => strikes.has(number))) return true;
+    if (board.every((row) => strikes.has(row[index] ?? -1))) return true;
+  }
+
+  return (
+    board.every((row, index) => strikes.has(row[index] ?? -1)) ||
+    board.every((row, index) => strikes.has(row[4 - index] ?? -1))
+  );
+};
+
+const App = () => {
   const [nickname, setNickname] = useState('');
   const [roomCode, setRoomCode] = useState('');
   const [inRoom, setInRoom] = useState(false);
-  const [board, setBoard] = useState([]);
-  const [strikes, setStrikes] = useState(new Set());
-  const [players, setPlayers] = useState([]);
+  const [board, setBoard] = useState<number[][]>([]);
+  const [strikes, setStrikes] = useState<Set<number>>(new Set());
+  const [players, setPlayers] = useState<string[]>([]);
   const [turn, setTurn] = useState('');
   const [winner, setWinner] = useState('');
   const [error, setError] = useState('');
 
-  // Socket events
-  useEffect(() => {
-    socket.on('startGame', ({ players, turn }) => {
-      setPlayers(players);
-      setTurn(turn);
-      setWinner('');
-    });
-    socket.on('boardsReady', () => {});
-    socket.on('strike', ({ number, nextTurn }) => {
-      setStrikes(s => new Set([...s, number]));
-      setTurn(nextTurn);
-    });
-    socket.on('win', ({ winner }) => setWinner(winner));
-    socket.on('playerLeft', () => setError('Other player left.'));
-    return () => socket.off();
-  }, []);
+  const normalizedNickname = useMemo(
+    () => nickname.trim().replace(/\s+/g, ' ').slice(0, 24),
+    [nickname],
+  );
 
-  // Send board to server after joining
-  useEffect(() => {
-    if (inRoom && board.length) {
-      socket.emit('sendBoard', { roomCode, board });
-    }
-  }, [inRoom, board, roomCode]);
-
-  function handleCreate() {
-    if (!nickname) return;
-    socket.emit('createRoom', { nickname }, ({ roomCode }) => {
-      setRoomCode(roomCode);
-      setInRoom(true);
-      setBoard(generateBoard());
-      setStrikes(new Set());
-    });
-  }
-
-  function handleJoin() {
-    if (!nickname || !roomCode) return;
-    socket.emit('joinRoom', { roomCode, nickname }, ({ error }) => {
-      if (error) setError(error);
-      else {
-        setInRoom(true);
-        setBoard(generateBoard());
-        setStrikes(new Set());
-      }
-    });
-  }
-
-  function handleStrike(num) {
-    if (turn !== nickname || strikes.has(num) || winner) return;
-    socket.emit('strike', { roomCode, number: num });
-    setStrikes(s => new Set([...s, num]));
-    if (checkWin(board, new Set([...strikes, num]))) {
-      socket.emit('win', { roomCode, winner: nickname });
-    }
-  }
-
-  function handleRestart() {
+  const resetGame = useCallback(() => {
     setBoard(generateBoard());
     setStrikes(new Set());
     setWinner('');
-    socket.emit('sendBoard', { roomCode, board });
-  }
+    setError('');
+  }, []);
+
+  useEffect(() => {
+    const onStartGame = ({ players: nextPlayers, turn: nextTurn }: StartGamePayload) => {
+      setPlayers(nextPlayers);
+      setTurn(nextTurn);
+      setWinner('');
+      setError('');
+    };
+
+    const onStrike = ({ number, nextTurn }: StrikePayload) => {
+      setStrikes((current) => {
+        const next = new Set(current);
+        next.add(number);
+        return next;
+      });
+      setTurn(nextTurn);
+    };
+
+    const onWin = ({ winner: nextWinner }: { winner: string }) => {
+      setWinner(nextWinner);
+    };
+
+    const onPlayerLeft = () => {
+      setError('The other player left the room.');
+      setInRoom(false);
+    };
+
+    socket.on('startGame', onStartGame);
+    socket.on('strike', onStrike);
+    socket.on('win', onWin);
+    socket.on('playerLeft', onPlayerLeft);
+
+    return () => {
+      socket.off('startGame', onStartGame);
+      socket.off('strike', onStrike);
+      socket.off('win', onWin);
+      socket.off('playerLeft', onPlayerLeft);
+    };
+  }, []);
+
+  const handleCreate = () => {
+    if (!normalizedNickname) {
+      setError('Enter a nickname first.');
+      return;
+    }
+
+    setError('');
+    socket.emit('createRoom', { nickname: normalizedNickname }, (response: ServerError & { roomCode?: string }) => {
+      if (response.error || !response.roomCode) {
+        setError(response.error ?? 'Unable to create room.');
+        return;
+      }
+
+      setRoomCode(response.roomCode);
+      setInRoom(true);
+      setPlayers([normalizedNickname]);
+      resetGame();
+    });
+  };
+
+  const handleJoin = () => {
+    const normalizedRoomCode = roomCode.trim().toUpperCase();
+
+    if (!normalizedNickname || normalizedRoomCode.length !== 6) {
+      setError('Enter a nickname and a valid 6-character room code.');
+      return;
+    }
+
+    setError('');
+    socket.emit(
+      'joinRoom',
+      { roomCode: normalizedRoomCode, nickname: normalizedNickname },
+      (response: ServerError) => {
+        if (response.error) {
+          setError(response.error);
+          return;
+        }
+
+        setRoomCode(normalizedRoomCode);
+        setInRoom(true);
+        resetGame();
+      },
+    );
+  };
+
+  const handleStrike = (number: number) => {
+    if (turn !== normalizedNickname || strikes.has(number) || winner) return;
+
+    socket.emit('strike', { roomCode, number });
+  };
+
+  const handleRestart = () => {
+    if (!roomCode) return;
+    socket.emit('restartGame', { roomCode }, (response: ServerError) => {
+      if (response.error) setError(response.error);
+    });
+  };
 
   if (!inRoom) {
     return (
-      <div className="p-8 max-w-md mx-auto">
-        <h1 className="text-2xl font-bold mb-4">StrikeZone</h1>
-        <input className="border p-2 mb-2 w-full" placeholder="Nickname" value={nickname} onChange={e => setNickname(e.target.value)} />
-        <div className="flex gap-2 mb-2">
-          <button className="bg-blue-500 text-white px-4 py-2" onClick={handleCreate}>Create Room</button>
-          <input className="border p-2 flex-1" placeholder="Room Code" value={roomCode} onChange={e => setRoomCode(e.target.value.toUpperCase())} />
-          <button className="bg-green-500 text-white px-4 py-2" onClick={handleJoin}>Join</button>
-        </div>
-        {error && <div className="text-red-500">{error}</div>}
-      </div>
+      <main className="app-shell">
+        <section className="card lobby">
+          <p className="eyebrow">STRIKEZONE</p>
+          <h1>Real-time number strategy</h1>
+          <p className="muted">Create a room or join a friend with a six-character code.</p>
+
+          <label>
+            Nickname
+            <input
+              value={nickname}
+              maxLength={24}
+              autoComplete="nickname"
+              onChange={(event) => setNickname(event.target.value)}
+              placeholder="Your nickname"
+            />
+          </label>
+
+          <button className="primary" onClick={handleCreate}>
+            Create room
+          </button>
+
+          <div className="divider">or</div>
+
+          <label>
+            Room code
+            <input
+              value={roomCode}
+              maxLength={6}
+              autoCapitalize="characters"
+              onChange={(event) => setRoomCode(event.target.value.replace(/[^a-z0-9]/gi, '').toUpperCase())}
+              placeholder="ABC123"
+            />
+          </label>
+
+          <button className="secondary" onClick={handleJoin}>
+            Join room
+          </button>
+
+          {error && <p className="error" role="alert">{error}</p>}
+        </section>
+      </main>
     );
   }
 
   return (
-    <div className="p-8 max-w-md mx-auto">
-      <h2 className="text-xl mb-2">Room: <b>{roomCode}</b></h2>
-      <div className="mb-2">Players: {players.join(' vs ')}</div>
-      <div className="mb-2">Turn: <b>{turn}</b></div>
-      {winner && <div className="text-green-600 font-bold mb-2">{winner} wins!</div>}
-      <div className="grid grid-cols-5 gap-2 mb-4">
-        {board.flat().map(num => (
-          <button
-            key={num}
-            className={`w-12 h-12 border rounded ${strikes.has(num) ? 'bg-gray-400' : 'bg-white'} ${turn === nickname && !strikes.has(num) && !winner ? 'hover:bg-blue-200' : ''}`}
-            onClick={() => handleStrike(num)}
-            disabled={strikes.has(num) || turn !== nickname || winner}
-          >
-            {num}
-          </button>
-        ))}
-      </div>
-      <button className="bg-yellow-500 text-white px-4 py-2" onClick={handleRestart}>Restart</button>
-      {error && <div className="text-red-500">{error}</div>}
-    </div>
-  );
-}
+    <main className="app-shell">
+      <section className="card game">
+        <div className="game-header">
+          <div>
+            <p className="eyebrow">ROOM {roomCode}</p>
+            <h1>StrikeZone</h1>
+          </div>
+          <span className={turn === normalizedNickname ? 'status your-turn' : 'status'}>
+            {winner ? 'Game over' : turn === normalizedNickname ? 'Your turn' : 'Waiting'}
+          </span>
+        </div>
 
-const MainApp = () => {
-  return (
-    <Router>
-      <Switch>
-        <Route path="/" exact component={App} />
-        <Route path="/game" component={GameBoard} />
-      </Switch>
-    </Router>
+        <p className="players">{players.join(' vs ')}</p>
+
+        {winner && <p className="winner" role="status">{winner} wins!</p>}
+
+        <div className="board" aria-label="5 by 5 number board">
+          {board.flat().map((number) => {
+            const disabled = strikes.has(number) || turn !== normalizedNickname || Boolean(winner);
+            return (
+              <button
+                key={number}
+                className={strikes.has(number) ? 'cell struck' : 'cell'}
+                onClick={() => handleStrike(number)}
+                disabled={disabled}
+                aria-label={`Strike number ${number}`}
+              >
+                {number}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="actions">
+          <button className="secondary" onClick={handleRestart}>Restart</button>
+          <button className="ghost" onClick={() => setInRoom(false)}>Leave</button>
+        </div>
+
+        {error && <p className="error" role="alert">{error}</p>}
+      </section>
+    </main>
   );
 };
 
-export default MainApp;
+export default App;
